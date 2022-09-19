@@ -2,7 +2,7 @@
 
 Nextflow wrapper to execute XenoCell, a tool to separate graft from host reads in single-cell RNA-seq xenograft experiments (https://gitlab.com/XenoCell/XenoCell, https://doi.org/10.1186/s12920-021-00872). Not affiliated with the original authors of XenoCell.
 
-Currently supports up to two lanes per fastq file.
+Currently supports up to two lanes per fastq file. An example Nextflow config file is included, which will need to be modifed to suit any particular system. Currrently runs XenoXell from an automatically pulled docker container via Singularity.
 
 **Command line options:**
 
