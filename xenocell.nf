@@ -2,10 +2,12 @@
 
 nextflow.enable.dsl=2
 
-params.threads = 16
-params.memory = 60
+params.threads = 1 // Might be safest, since Xenome has a known threading issue
+params.memory = 24 // https://github.com/data61/gossamer/issues/14
 params.compression_level = 1
 
+params.graft_fasta = "/data/local/reference/cellranger/refdata-gex-GRCh38-2020-A/fasta/genome.fa"
+params.host_fasta = "/data/local/reference/cellranger/refdata-gex-mm10-2020-A/fasta/genome.fa"
 params.index = "/data/local/reference/cellranger/xenome/graft_GRCh38_host_mm10"
 params.outdir = "./results"
 
@@ -20,6 +22,26 @@ params.fastq_lane_1_read_1 = "${params.fastqdir}/*/*_L001_R1_001.fastq.gz"
 params.fastq_lane_1_read_2 = "${params.fastqdir}/*/*_L001_R2_001.fastq.gz"
 params.fastq_lane_2_read_1 = "${params.fastqdir}/*/*_L002_R1_001.fastq.gz"
 params.fastq_lane_2_read_2 = "${params.fastqdir}/*/*_L002_R2_001.fastq.gz"
+
+process GENERATE_INDEX {
+
+    input:
+        past(graft_fasta)
+        path(host_fasta)
+
+    output:
+        path(index), emit: index_ch
+
+    script:
+    """    
+    xenocell.py generate_index \
+        --host "${host_fasta}" \
+        --graft "${graft_fasta}" \
+        --output "${index}" \
+        --threads 1 \
+        --memory 24
+    """
+}
 
 process MERGE_READS {
 
@@ -44,6 +66,7 @@ process CLASSIFY_READS {
 
     input:
         tuple val(sample), val(fastq_1), val(fastq_2)
+        path(index)
 
     output:
         path("${sample}"), emit: classify_reads_ch
@@ -92,9 +115,6 @@ process EXTRACT_GRAFT_BARCODES {
         --upper_threshold "${params.upper_threshold_graft}" \
         --threads "${params.threads}" \
         --compression_level "${params.compression_level}"
-
-    mv ${sample_output_dir}/graft/fq_barcode.fq.gz ${sample_output_dir}/graft/\$(basename ${sample_output_dir})_graft_R1_001.fq.gz
-    mv ${sample_output_dir}/graft/fq_transcript.fq.gz ${sample_output_dir}/graft/\$(basename ${sample_output_dir})_graft_R2_001.fq.gz
     """
 }
 
@@ -119,13 +139,17 @@ process EXTRACT_HOST_BARCODES {
         --upper_threshold 1.0 \
         --threads "${params.threads}" \
         --compression_level "${params.compression_level}"
-
-    mv ${sample_output_dir}/host/fq_barcode.fq.gz ${sample_output_dir}/host/\$(basename ${sample_output_dir})_host_R1_001.fq.gz
-    mv ${sample_output_dir}/host/fq_transcript.fq.gz ${sample_output_dir}/host/\$(basename ${sample_output_dir})_host_R2_001.fq.gz
     """
 }
 
 workflow {
+
+    if (!params.index){
+        GENERATE_INDEX(params.graft_fasta,params.host_fasta)
+        index = GENERATE_INDEX.out.index_ch
+    } else {
+        index = Channel.fromPath(params.index)
+    }
 
     //input_reads_ch = Channel.fromFilePairs(params.fastq, flat:true, size:4).view()
     input_reads_ch_lane_1_read_1 = Channel.fromFilePairs(params.fastq_lane_1_read_1, flat:true, size:1)
@@ -143,7 +167,8 @@ workflow {
     )
 
     CLASSIFY_READS(
-         MERGE_READS.out.merge_reads_ch
+         MERGE_READS.out.merge_reads_ch,
+         index
     )
 
     EXTRACT_GRAFT_BARCODES(
