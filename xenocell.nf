@@ -146,9 +146,9 @@ workflow {
 
     if (!params.index){
         GENERATE_INDEX(params.graft_fasta,params.host_fasta)
-        index = GENERATE_INDEX.out.index_ch
+        index = GENERATE_INDEX.out.index_ch.collect()
     } else {
-        index = Channel.fromPath(params.index)
+        index = Channel.fromPath(params.index).collect()
     }
 
     //input_reads_ch = Channel.fromFilePairs(params.fastq, flat:true, size:4).view()
